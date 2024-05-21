@@ -90,28 +90,9 @@
 				{capture assign=submissionProgressBarUrl}{url op="submissionProgressBar" submissionId=$submission->getId() stageId=$requestedStageId contextId="submission" escape=false}{/capture}
 				{load_url_in_div id="submissionProgressBarDiv" url=$submissionProgressBarUrl}
 			</div>
-
-			{* Modal to select one of the revision decisions *}
-			<modal
-				:close-label="__('common.close')"
-				name="selectRevisionDecision"
-				title="Revisions"
-			>
-				<pkp-form v-bind="components.{$smarty.const.FORM_SELECT_REVISION_DECISION}" @set="set" @success="goToRevisionDecision" />
-			</modal>
-
-			{* Modal to select one of the revision recommendations *}
-			<modal
-				:close-label="__('common.close')"
-				name="selectRevisionRecommendation"
-				title="Revisions"
-			>
-				<pkp-form v-bind="components.{$smarty.const.FORM_SELECT_REVISION_RECOMMENDATION}" @set="set" @success="goToRevisionDecision" />
-			</modal>
 		</tab>
 		{if $canAccessPublication}
 			<tab id="publication" label="{translate key="submission.publication"}">
-				{help file="editorial-workflow/publication" class="pkp_help_tab"}
 				<div class="pkpPublication" ref="publication" aria-live="polite">
 					<pkp-header class="pkpPublication__header" :is-one-line="false">
 						<span class="pkpPublication__status">

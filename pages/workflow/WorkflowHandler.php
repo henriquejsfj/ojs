@@ -18,28 +18,16 @@ namespace APP\pages\workflow;
 
 use APP\core\Application;
 use APP\core\Services;
-use APP\decision\types\Accept;
-use APP\decision\types\SkipExternalReview;
+use APP\decision\types\Decline;
+use APP\decision\types\RevertDecline;
 use APP\facades\Repo;
 use APP\file\PublicFileManager;
 use APP\publication\Publication;
 use APP\submission\Submission;
 use APP\template\TemplateManager;
+use Exception;
 use PKP\components\forms\publication\TitleAbstractForm;
 use PKP\context\Context;
-use PKP\decision\types\BackFromCopyediting;
-use PKP\decision\types\BackFromProduction;
-use PKP\decision\types\CancelReviewRound;
-use PKP\decision\types\Decline;
-use PKP\decision\types\InitialDecline;
-use PKP\decision\types\RecommendAccept;
-use PKP\decision\types\RecommendDecline;
-use PKP\decision\types\RecommendRevisions;
-use PKP\decision\types\RequestRevisions;
-use PKP\decision\types\RevertDecline;
-use PKP\decision\types\RevertInitialDecline;
-use PKP\decision\types\SendExternalReview;
-use PKP\decision\types\SendToProduction;
 use PKP\notification\PKPNotification;
 use PKP\pages\workflow\PKPWorkflowHandler;
 use PKP\plugins\Hook;
@@ -93,20 +81,23 @@ class WorkflowHandler extends PKPWorkflowHandler
         $latestPublicationApiUrl = $request->getDispatcher()->url($request, Application::ROUTE_API, $submissionContext->getPath(), 'submissions/' . $submission->getId() . '/publications/' . $latestPublication->getId());
         $temporaryFileApiUrl = $request->getDispatcher()->url($request, Application::ROUTE_API, $submissionContext->getPath(), 'temporaryFiles');
         $issueApiUrl = $request->getDispatcher()->url($request, Application::ROUTE_API, $submissionContext->getData('urlPath'), 'issues/__issueId__');
+        // $relatePublicationApiUrl = $request->getDispatcher()->url($request, Application::ROUTE_API, $submissionContext->getPath(), 'submissions/' . $submission->getId() . '/publications/' . $latestPublication->getId()) . '/relate';
 
         $publicFileManager = new PublicFileManager();
         $baseUrl = $request->getBaseUrl() . '/' . $publicFileManager->getContextFilesPath($submissionContext->getId());
 
         $issueEntryForm = new \APP\components\forms\publication\IssueEntryForm($latestPublicationApiUrl, $locales, $latestPublication, $submissionContext, $baseUrl, $temporaryFileApiUrl);
+        // $relationForm = new \APP\components\forms\publication\RelationForm($relatePublicationApiUrl, $latestPublication);
 
         $sectionWordLimits = [];
         $sections = Repo::section()->getCollector()->filterByContextIds([$submissionContext->getId()])->getMany();
         foreach ($sections as $section) {
             $sectionWordLimits[$section->getId()] = (int) $section->getAbstractWordCount() ?? 0;
         }
-
+        
         class_exists(\APP\components\forms\publication\AssignToIssueForm::class); // Force define of FORM_ASSIGN_TO_ISSUE
         $templateMgr->setConstants([
+            // 'FORM_ID_RELATION' => FORM_ID_RELATION,
             'FORM_ASSIGN_TO_ISSUE' => FORM_ASSIGN_TO_ISSUE,
             'FORM_ISSUE_ENTRY' => FORM_ISSUE_ENTRY,
             'FORM_PUBLISH' => FORM_PUBLISH,
@@ -143,7 +134,7 @@ class WorkflowHandler extends PKPWorkflowHandler
                 }
             }
         }
-
+        
         $assignToIssueUrl = $request->getDispatcher()->url(
             $request,
             Application::ROUTE_COMPONENT,
@@ -156,6 +147,8 @@ class WorkflowHandler extends PKPWorkflowHandler
                 'publicationId' => '__publicationId__',
             ]
         );
+        
+        // $components[FORM_ID_RELATION] = $relationForm->getConfig();
 
         $publicationFormIds = $templateMgr->getState('publicationFormIds');
         $publicationFormIds[] = FORM_ISSUE_ENTRY;
@@ -183,13 +176,10 @@ class WorkflowHandler extends PKPWorkflowHandler
      */
     protected function getEditorAssignmentNotificationTypeByStageId($stageId)
     {
+        if ($stageId !== WORKFLOW_STAGE_ID_PRODUCTION) {
+            throw new Exception('Only the production stage is supported in OPS.');
+        }
         switch ($stageId) {
-            case WORKFLOW_STAGE_ID_SUBMISSION:
-                return PKPNotification::NOTIFICATION_TYPE_EDITOR_ASSIGNMENT_SUBMISSION;
-            case WORKFLOW_STAGE_ID_EXTERNAL_REVIEW:
-                return PKPNotification::NOTIFICATION_TYPE_EDITOR_ASSIGNMENT_EXTERNAL_REVIEW;
-            case WORKFLOW_STAGE_ID_EDITING:
-                return PKPNotification::NOTIFICATION_TYPE_EDITOR_ASSIGNMENT_EDITING;
             case WORKFLOW_STAGE_ID_PRODUCTION:
                 return PKPNotification::NOTIFICATION_TYPE_EDITOR_ASSIGNMENT_PRODUCTION;
         }
@@ -214,47 +204,20 @@ class WorkflowHandler extends PKPWorkflowHandler
 
     protected function getStageDecisionTypes(int $stageId): array
     {
-        $submission = $this->getAuthorizedContextObject(Application::ASSOC_TYPE_SUBMISSION);
-        $request = Application::get()->getRequest();
-        $reviewRoundId = (int) $request->getUserVar('reviewRoundId');
+        if ($stageId !== WORKFLOW_STAGE_ID_PRODUCTION) {
+            throw new Exception('Only the production stage is supported in OPS.');
+        }
 
+        $submission = $this->getAuthorizedContextObject(Application::ASSOC_TYPE_SUBMISSION);
+
+        $decisionTypes = [];
         switch ($stageId) {
-            case WORKFLOW_STAGE_ID_SUBMISSION:
-                $decisionTypes = [
-                    new SendExternalReview(),
-                    new SkipExternalReview(),
-                ];
-                if ($submission->getData('status') === Submission::STATUS_DECLINED) {
-                    $decisionTypes[] = new RevertInitialDecline();
-                } elseif ($submission->getData('status') === Submission::STATUS_QUEUED) {
-                    $decisionTypes[] = new InitialDecline();
-                }
-                break;
-            case WORKFLOW_STAGE_ID_EXTERNAL_REVIEW:
-                $decisionTypes = [
-                    new RequestRevisions(),
-                    new Accept(),
-                ];
-                $cancelReviewRound = new CancelReviewRound();
-                if ($cancelReviewRound->canRetract($submission, $reviewRoundId)) {
-                    $decisionTypes[] = $cancelReviewRound;
-                }
+            case WORKFLOW_STAGE_ID_PRODUCTION:
                 if ($submission->getData('status') === Submission::STATUS_DECLINED) {
                     $decisionTypes[] = new RevertDecline();
                 } elseif ($submission->getData('status') === Submission::STATUS_QUEUED) {
                     $decisionTypes[] = new Decline();
                 }
-                break;
-            case WORKFLOW_STAGE_ID_EDITING:
-                $decisionTypes = [
-                    new SendToProduction(),
-                    new BackFromCopyediting(),
-                ];
-                break;
-            case WORKFLOW_STAGE_ID_PRODUCTION:
-                $decisionTypes = [
-                    new BackFromProduction(),
-                ];
                 break;
         }
 
@@ -265,18 +228,11 @@ class WorkflowHandler extends PKPWorkflowHandler
 
     protected function getStageRecommendationTypes(int $stageId): array
     {
-        switch ($stageId) {
-            case WORKFLOW_STAGE_ID_EXTERNAL_REVIEW:
-                $decisionTypes = [
-                    new RecommendRevisions(),
-                    new RecommendAccept(),
-                    new RecommendDecline(),
-                ];
-                break;
-            default:
-                $decisionTypes = [];
+        if ($stageId !== WORKFLOW_STAGE_ID_PRODUCTION) {
+            throw new Exception('Only the production stage is supported in OPS.');
         }
 
+        $decisionTypes = [];
 
         Hook::call('Workflow::Recommendations', [$decisionTypes, $stageId]);
 
@@ -285,27 +241,20 @@ class WorkflowHandler extends PKPWorkflowHandler
 
     protected function getPrimaryDecisionTypes(): array
     {
-        return [
-            SendExternalReview::class,
-            Accept::class,
-            SendToProduction::class,
-        ];
+        return [];
     }
 
     protected function getWarnableDecisionTypes(): array
     {
         return [
-            InitialDecline::class,
             Decline::class,
-            CancelReviewRound::class,
-            BackFromCopyediting::class,
-            BackFromProduction::class,
         ];
     }
 
     protected function getTitleAbstractForm(string $latestPublicationApiUrl, array $locales, Publication $latestPublication, Context $context): TitleAbstractForm
     {
         $section = Repo::section()->get($latestPublication->getData('sectionId'), $context->getId());
+
         return new TitleAbstractForm(
             $latestPublicationApiUrl,
             $locales,
