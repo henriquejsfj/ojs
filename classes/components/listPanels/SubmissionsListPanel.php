@@ -71,21 +71,21 @@ class SubmissionsListPanel extends PKPSubmissionsListPanel
     public function getWorkflowStages()
     {
         return [
-            [
-                'param' => 'stageIds',
-                'value' => WORKFLOW_STAGE_ID_SUBMISSION,
-                'title' => __('manager.publication.submissionStage'),
-            ],
-            [
-                'param' => 'stageIds',
-                'value' => WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
-                'title' => __('manager.publication.reviewStage'),
-            ],
-            [
-                'param' => 'stageIds',
-                'value' => WORKFLOW_STAGE_ID_EDITING,
-                'title' => __('submission.copyediting'),
-            ],
+            // [
+            //     'param' => 'stageIds',
+            //     'value' => WORKFLOW_STAGE_ID_SUBMISSION,
+            //     'title' => __('manager.publication.submissionStage'),
+            // ],
+            // [
+            //     'param' => 'stageIds',
+            //     'value' => WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
+            //     'title' => __('manager.publication.reviewStage'),
+            // ],
+            // [
+            //     'param' => 'stageIds',
+            //     'value' => WORKFLOW_STAGE_ID_EDITING,
+            //     'title' => __('submission.copyediting'),
+            // ],
             [
                 'param' => 'stageIds',
                 'value' => WORKFLOW_STAGE_ID_PRODUCTION,
